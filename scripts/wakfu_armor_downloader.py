@@ -1,14 +1,15 @@
 import requests
 import json
-from bs4 import BeautifulSoup
 import sqlite3
 import time
 
-DB_NAME = 'wakfu_armors.db'
+DB_NAME = 'db/wakfu_armors.db'
 BASE_URL = 'https://www.wakfu.com'
 ARMOR_LIST_URL = f'{BASE_URL}/en/mmorpg/encyclopedia/armors'
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
 
-# Set up the database
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -26,11 +27,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-}
-
 def get_all_armors():
     armors = []
     page = 1
@@ -39,8 +35,6 @@ def get_all_armors():
         print(f"Fetching {url}")
         resp = requests.get(url, headers=HEADERS)
         soup = BeautifulSoup(resp.text, 'html.parser')
-        # DEBUG: Print a portion of the HTML to inspect structure
-        # Parse the armor table
         table = soup.find('table')
         if not table:
             print("No table found on page.")
@@ -54,14 +48,11 @@ def get_all_armors():
             cols = row.find_all('td')
             if len(cols) < 5:
                 continue
-            # Name and link
             name_tag = cols[1].find('a')
             name = name_tag.text.strip() if name_tag else ''
             link = BASE_URL + name_tag['href'] if name_tag and name_tag.has_attr('href') else ''
-            # ID from URL
             armor_id = None
             if name_tag and name_tag.has_attr('href'):
-                # URL format: /en/mmorpg/encyclopedia/armors/31837-primitive-headgear
                 parts = name_tag['href'].split('/')
                 if len(parts) > 0:
                     id_part = parts[-1].split('-')[0]
@@ -69,13 +60,10 @@ def get_all_armors():
                         armor_id = int(id_part)
                     except Exception:
                         armor_id = None
-            # Type from image alt text in the item-type column (usually column 2)
             type_img_tag = cols[2].find('img') if len(cols) > 2 else None
             type_ = type_img_tag['alt'].strip() if type_img_tag and type_img_tag.has_attr('alt') else ''
-            # Bonuses as JSON array (split by lines, remove empty lines, strip)
             bonuses_lines = [line.strip() for line in cols[3].stripped_strings if line.strip()]
             bonuses = json.dumps(bonuses_lines, ensure_ascii=False)
-            # Level
             level_text = cols[4].text.strip()
             try:
                 level = int(level_text.replace('Lvl', '').strip())
@@ -92,9 +80,6 @@ def get_all_armors():
                 })
         # Only fetch the first page for now (remove this return to enable pagination)
         return armors
-    return armors
-
-
 
 def save_armor(armor):
     conn = sqlite3.connect(DB_NAME)
@@ -113,8 +98,9 @@ def main():
     for i, armor in enumerate(armors):
         print(f'[{i+1}/{len(armors)}] Saving {armor["name"]}')
         save_armor(armor)
-        time.sleep(0.1)  # be polite to the server
+        time.sleep(0.1)
     print('Done.')
 
 if __name__ == '__main__':
+    from bs4 import BeautifulSoup
     main()
